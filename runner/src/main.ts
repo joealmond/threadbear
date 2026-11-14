@@ -934,8 +934,8 @@ async function main(): Promise<void> {
       return { ...res, ...(thread ? { thread } : {}) };
     });
   methods['swiftChanges.dismiss'] = (p) => swiftCall(() => swiftChanges.dismiss(swiftCommit(p), (p as { undo?: unknown } | undefined)?.undo === true));
-  const codexWarning = missingCodex(updates.codexBinary(), cfg);
-  if (codexWarning) log.warn('codex CLI not found', { path: updates.codexBinary() });
+  const codexMissing = updates.missingCodexNotice();
+  if (codexMissing) log[codexMissing.level === 'info' ? 'info' : 'warn']('codex CLI not found', { path: updates.codexBinary() });
   // Other runners' threads through the backend, for the Mac app (relay.ts).
   const relay = (relayRef = new Relay({
     source: () => sync.relaySource(),
@@ -1169,7 +1169,7 @@ async function main(): Promise<void> {
     desktopHello: () => void swiftChanges.desktopHello().catch((e) => log.warn('swift changes: first look failed', { error: String(e) })),
     helloNotices: () => {
       // Like a missing claude: said to every client, until it's there.
-      const noCodex = missingCodex(updates.codexBinary(), cfg);
+      const noCodex = updates.missingCodexNotice();
       // Pushes failing (sync.ts notePushFailing) is said once as it starts;
       // an app that wasn't connected then hears it here.
       const pushFailing = sync.status().pushFailing;
@@ -1179,7 +1179,7 @@ async function main(): Promise<void> {
         ...(useWarning ? [{ level: 'warning' as const, message: useWarning }] : []),
         ...(pushFailing ? [{ level: 'warning' as const, message: pushFailingText(pushFailing) }] : []),
         ...(rolledBack ? [{ level: 'warning' as const, message: rolledBack }] : []),
-        ...(noCodex ? [{ level: 'warning' as const, message: noCodex }] : []),
+        ...(noCodex ? [noCodex] : []),
         ...restarter.helloNotices(),
         ...instructions.helloNotices(),
       ];
@@ -1446,16 +1446,6 @@ async function main(): Promise<void> {
       }
     }
   });
-}
-
-// A warning when the Codex binary new sessions would start isn't there, or
-// undefined. Threadbear's own copy may still be on its way.
-function missingCodex(start: string, cfg: ReturnType<typeof loadConfig>): string | undefined {
-  const bin = resolveCodexBinary(start);
-  if (fs.existsSync(bin.command)) return undefined;
-  if (cfg.codexPath) return `The codex CLI isn't at ${cfg.codexPath} (codexPath in runner.json), so Codex threads can't start.`;
-  if (cfg.cliUpdates.codex !== 'off') return `The codex CLI isn't at ${start} yet, so Codex threads can't start until Threadbear has installed its own copy (Usage shows how that's going).`;
-  return `The codex CLI isn't at ${start}, so Codex threads can't start. Install @openai/codex next to the runner's Node, or set codexPath in runner.json.`;
 }
 
 main().catch(async (e) => {

@@ -591,3 +591,34 @@ test('a routine check keeps an ACP agent\'s version', async () => {
   await (c.u as unknown as { refreshInstalled(): Promise<void> }).refreshInstalled();
   assert.equal(c.u.list().find((r) => r.provider === 'opencode')!.installedVersion, '1.0.0');
 });
+
+test('codex: with no copy of its own yet, the first start installs one at once, not after the first check', async () => {
+  const t = setup();
+  t.u.start();
+  await t.u.settled();
+  t.u.stop();
+  assert.deepEqual(t.npm.installs(), ['0.165.0']);
+  assert.equal(t.u.codexBinary(), path.join(t.tools, 'current'));
+});
+
+test('codex: a missing CLI is only a quiet note while its own copy is on its way, and a warning once that fails (it sat in the error bar, 14 Nov)', async () => {
+  const t = setup();
+  const waiting = t.u.missingCodexNotice();
+  assert.equal(waiting?.level, 'info');
+  assert.match(waiting!.message, /installed its own copy/);
+  fs.writeFileSync(path.join(t.root, 'fail-0.165.0'), '');
+  fs.writeFileSync(path.join(t.root, 'fail-0.164.0'), '');
+  t.u.update('codex', { version: '0.165.0' });
+  await t.u.settled();
+  assert.equal(of(t.u.list(), 'codex').update?.state, 'failed');
+  assert.equal(t.u.missingCodexNotice()?.level, 'warning');
+  fs.rmSync(path.join(t.root, 'fail-0.165.0'));
+  t.u.update('codex', { version: '0.165.0' });
+  await t.u.settled();
+  assert.equal(t.u.missingCodexNotice(), undefined, 'gone once the copy is there');
+  const byHand = setup({ cfg: { codexPath: '/nowhere/codex' } });
+  assert.deepEqual(byHand.u.missingCodexNotice(), { level: 'warning', message: "The codex CLI isn't at /nowhere/codex (codexPath in runner.json), so Codex threads can't start." });
+  const off = setup({ cfg: { cliUpdates: { claude: 'auto', codex: 'off', checkMinutes: 60, keepCodexVersions: 2 } } });
+  assert.equal(off.u.missingCodexNotice()?.level, 'warning');
+  assert.match(off.u.missingCodexNotice()!.message, /Install @openai\/codex next to the runner's Node/);
+});

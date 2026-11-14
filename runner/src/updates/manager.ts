@@ -121,6 +121,9 @@ export class CliUpdates {
     if (this.managedCodex() && this.copies.cleanPartials().length) this.d.log.info('cli updates: removed an unfinished Codex install');
     this.track('claude', this.refreshInstalled());
     for (const p of this.acpProviders()) this.track(p, this.refreshAcp(p));
+    // No copy of its own yet (a first start): install one now rather than
+    // after the first check, as Codex threads can't start until it's there.
+    if (this.policy('codex') === 'auto' && this.managedCodex() && !this.copies.currentVersion()) this.track('codex', this.runCheck('codex', false));
     this.schedule('check', FIRST_CHECK_MS);
   }
 
@@ -144,6 +147,22 @@ export class CliUpdates {
     if (this.cfg.codexPath) return this.cfg.codexPath;
     if (!this.configOff('codex') && this.copies.currentVersion()) return this.copies.currentLink;
     return this.fallbackCodex();
+  }
+
+  // What to tell the apps when the Codex binary new sessions would start
+  // isn't there, or undefined. While Threadbear's own first copy is on its
+  // way that's only a note (info stays out of the apps' error bar, and is
+  // never taken back once the copy lands); a warning once installing it
+  // failed, or when nothing will put it there.
+  missingCodexNotice(): { level: 'info' | 'warning'; message: string } | undefined {
+    const start = this.codexBinary();
+    if (fs.existsSync(this.d.codex.resolve(start).command)) return undefined;
+    if (this.cfg.codexPath) return { level: 'warning', message: `The codex CLI isn't at ${this.cfg.codexPath} (codexPath in runner.json), so Codex threads can't start.` };
+    if (this.policy('codex') !== 'off') {
+      const failed = this.st.codex?.update?.state === 'failed';
+      return { level: failed ? 'warning' : 'info', message: `The codex CLI isn't at ${start} yet, so Codex threads can't start until Threadbear has installed its own copy (Usage shows how that's going).` };
+    }
+    return { level: 'warning', message: `The codex CLI isn't at ${start}, so Codex threads can't start. Install @openai/codex next to the runner's Node, or set codexPath in runner.json.` };
   }
 
   list(): CliStatus[] {
