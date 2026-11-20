@@ -414,9 +414,10 @@ struct WebPictureLink: View {
     var alt: String
     var url: URL
 
-    // A Link hands the tap to the environment's openURL, the thread's own
-    // link handling, which ends at LinkGate.
     var body: some View {
+        // A Link, not a Button calling openURL itself: it goes through the
+        // same openURL the thread sets up (LinkGate, or the thread's own
+        // links), and OpenGateSourceTests refuses calling it directly.
         Link(destination: url) {
             PictureOnMac(alt: alt, note: "Picture on \(url.host() ?? "the web"), not loaded. Tap to open it.")
         }
